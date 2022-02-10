@@ -1,0 +1,75 @@
+---
+title: "2022 01 20 Test Rmarkdown"
+subtitle: ""
+excerpt: ""
+date: 2022-01-20T17:13:29-05:00
+author: ""
+draft: true
+series:
+tags:
+categories:
+layout: single # single or single-sidebar
+---
+
+<script src="{{< blogdown/postref >}}index_files/header-attrs/header-attrs.js"></script>
+
+
+<p>Let’s see if this works</p>
+<pre class="r"><code>set.seed(3)
+hist(rnorm(100))</code></pre>
+<p><img src="{{< blogdown/postref >}}index_files/figure-html/unnamed-chunk-1-1.png" width="672" /></p>
+<pre class="r"><code>library(tidyverse)
+
+mtcars %&gt;% 
+  rownames_to_column(var =&quot;car&quot;) %&gt;% 
+  as_tibble() %&gt;% 
+  filter(str_detect(car, &quot;Mazda&quot;)) %&gt;% 
+  knitr::kable()</code></pre>
+<table>
+<thead>
+<tr class="header">
+<th align="left">car</th>
+<th align="right">mpg</th>
+<th align="right">cyl</th>
+<th align="right">disp</th>
+<th align="right">hp</th>
+<th align="right">drat</th>
+<th align="right">wt</th>
+<th align="right">qsec</th>
+<th align="right">vs</th>
+<th align="right">am</th>
+<th align="right">gear</th>
+<th align="right">carb</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">Mazda RX4</td>
+<td align="right">21</td>
+<td align="right">6</td>
+<td align="right">160</td>
+<td align="right">110</td>
+<td align="right">3.9</td>
+<td align="right">2.620</td>
+<td align="right">16.46</td>
+<td align="right">0</td>
+<td align="right">1</td>
+<td align="right">4</td>
+<td align="right">4</td>
+</tr>
+<tr class="even">
+<td align="left">Mazda RX4 Wag</td>
+<td align="right">21</td>
+<td align="right">6</td>
+<td align="right">160</td>
+<td align="right">110</td>
+<td align="right">3.9</td>
+<td align="right">2.875</td>
+<td align="right">17.02</td>
+<td align="right">0</td>
+<td align="right">1</td>
+<td align="right">4</td>
+<td align="right">4</td>
+</tr>
+</tbody>
+</table>

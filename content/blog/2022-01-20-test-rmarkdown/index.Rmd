@@ -1,0 +1,30 @@
+---
+title: "2022 01 20 Test Rmarkdown"
+subtitle: ""
+excerpt: ""
+date: 2022-01-20T17:13:29-05:00
+author: ""
+draft: true
+series:
+tags:
+categories:
+layout: single # single or single-sidebar
+---
+
+Let's see if this works
+
+```{r}
+set.seed(3)
+hist(rnorm(100))
+```
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+
+mtcars %>% 
+  rownames_to_column(var ="car") %>% 
+  as_tibble() %>% 
+  filter(str_detect(car, "Mazda")) %>% 
+  knitr::kable()
+```
+
