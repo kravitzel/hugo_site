@@ -2,7 +2,7 @@
 action_label: Read More &rarr;
 action_link: /about
 action_type: text
-description: Blog topics covering R programming, Tidyverse, biostatistics, survival analysis, Bayesian sattistics, and more. 
+description: Blog topics covering R programming, Tidyverse, clinical trials, biostatistics, survival analysis, Bayesian statistics, and more. 
 image_left: true
 images:
 - img/revoir.jpg
