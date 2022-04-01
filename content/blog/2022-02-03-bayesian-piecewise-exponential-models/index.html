@@ -24,26 +24,84 @@ and the corresponding survival function given by
 </div>
 <div id="why-use-an-exponential-model" class="section level2">
 <h2>Why use an Exponential Model</h2>
+<p>An exponential survival model may seem overly simplistic. The assumptions are not realistic for most real world applications; an exponential model would say you have the same risk of death at 80 years old and 20 years old. Why then would anyone use the exponential distribution?</p>
+<p>Well, sometimes, it works. On a short enough time scale the risk may be constant and only modified by covariates. If a medical treatment is given for 3 months, the risk of relapse may be constant.</p>
+<p>The median of the exponential distribution has a simple expression: <span class="math inline">\(\frac{\log(2)}{\lambda}\)</span>. Say we don’t have patient level data and we only know that the median overall survival time is 6 months. If we want to simulate what those patient-level survival times look like, our best guess would be to simulate them from an <span class="math inline">\(Exp \Big(\frac{\log(2))}{6} \Big)\)</span></p>
 </div>
 <div id="piecewise-exponential-model" class="section level2">
 <h2>Piecewise Exponential Model</h2>
+<p>A piecewise exponential model is a flexible extension to the exponential model. We define <span class="math inline">\(J\)</span> unique cutpoints <span class="math inline">\(0 &lt; \tau_1 &lt; \tau_2 &lt; \dots \tau_J = \infty\)</span> partition time into <span class="math inline">\(J\)</span> disjoint. In each interval, we assume there is a constant hazard rate. In the <span class="math inline">\(j^{th}\)</span> interval, defined by <span class="math inline">\([\tau_{j-1}, \tau_j)\)</span>, the hazard is
+<span class="math display">\[h(t) = \lambda_j \text{ for } t \in [\tau_{j-1}, \tau_j)\]</span></p>
+<p>There are always drawbacks. The difficulty of a piecewise exponential model is that you have to define the changepoints. There is some literature with mixed success (find sources) of estimate both the changepoints and the hazards.</p>
+<p>There are two areas where piecewise exponential models are especially useful:
+1. Modeling survival times when there is a known change in exposure. We’ll look at an example where patients can switch treatments in a clinical trial
+2. Approximating a complicated survival function. Think using regression splines</p>
 <div id="one-changepoint-two-hazards" class="section level3">
 <h3>One Changepoint / Two Hazards</h3>
+<p>Say we’re observing two groups of patients: a low risk group and a high risk group. We know from a previous study that low risk patients have a median survival time of 20 months and high risk patients have a median survival time of 10 months.</p>
+<p>After 6 months of the study, a new treatment is approved and all patients are given this treatment. We expect low-risk patients to have a 40% reduction in mortality, corresponding to a hazard ratio of 0.60. High-risk patients have a 50% reduction in mortality risk (hazard ratio of 0.5).</p>
+<p>This is the perfect situation to use a piecewise exponential model. We’ll break our time interval into <span class="math inline">\([0, 6)\)</span> and <span class="math inline">\([6, \infty]\)</span>. Our hazard an survival functions look like</p>
 <p><img src="{{< blogdown/postref >}}index_files/figure-html/two_hazard_pw-1.png" width="672" /></p>
 </div>
 </div>
 <div id="fitting-a-piecewise-exponential-with-stan" class="section level2">
 <h2>Fitting a Piecewise Exponential with Stan</h2>
 <pre class="r"><code>library(PWEALL) # Simulates piecewise exponential
+library(survival)
+
+n_per_arm &lt;- 10000
+n_events &lt;- 400
+ctrl_rates = log(2) / c(15, 40) # Median surv time 15 months before change point, 40 after
+trt_rates = log(2) / c(25, 80) # Median surv time 25 months before change point, 50 after
+
+change_point = 15
 
 # Simulate survival times -----------------------------------------------------
-# ctrl_time = rpwe(nr = n_ctrl, rate = c(rate_1_ctrl, rate_2_ctrl), tchange = c(0,change_point))$r
-# trt_time = rpwe(nr = n_trt, rate = c(rate_1_trt, rate_2_trt), tchange = c(0,change_point))$r
-# 
+ctrl_time = rpwe(nr = n_per_arm, rate = ctrl_rates, tchange = c(0,changepoint))$r
+trt_time = rpwe(nr = n_per_arm, rate = trt_rates, tchange = c(0,changepoint))$r
+
 # all_data = tibble(
-#   &quot;id&quot; = seq(1, n_trt + n_ctrl),
-#   &quot;time&quot; = c(ctrl_time, trt_time),
-#   &quot;trt&quot; = c(rep(0, n_ctrl), rep(1, n_trt)),
-#   &quot;event&quot; = 1 # everyone has an event, replace with censoring in actual data
-# )</code></pre>
+#   &quot;id&quot; = seq(1, 2 * n_per_arm),
+#   &quot;arm&quot; = c(rep(&quot;ctrl&quot;, n_per_arm), rep(&quot;trt&quot;, n_per_arm)),
+#   &quot;true_time&quot; = c(ctrl_time, trt_time)
+# ) %&gt;% 
+#   mutate( # administrative censoring at 80$ events, (400 events)
+#     &quot;event&quot; = if_else(true_time &gt; nth(true_time, n_events, order_by = true_time), 0L, 1L),
+#     &quot;obs_time&quot; = if_else(event == 1L, true_time, nth(true_time, n_events, order_by = true_time))
+#     ) 
+
+all_data = tibble(
+  &quot;id&quot; = seq(1, 2 * n_per_arm),
+  &quot;arm&quot; = c(rep(&quot;ctrl&quot;, n_per_arm), rep(&quot;trt&quot;, n_per_arm)),
+  &quot;time&quot; = c(ctrl_time, trt_time),
+  event = 1)
+
+# Fit model -------------------------------------------------------------------
+# Piecewise exponential model needs to be fit as a Poisson model with an offset.
+# You can ignore why this works if you want. References are below
+#     Math explained: https://data.princeton.edu/wws509/notes/c7s4
+#     Code explained: https://data.princeton.edu/wws509/r/recidivism
+
+# Put survival data into subrecord format
+survival_data &lt;- survSplit(Surv(time, event) ~ arm,
+                           id = &quot;id&quot;,
+                           start = &quot;t_start&quot;,
+                           end = &quot;t_end&quot;,
+                           cut = c(change_point),
+                           episode = &quot;interval&quot;,
+                           data = all_data) %&gt;% 
+  mutate(exposure = t_end - t_start,
+         interval = ifelse(interval == 1, &quot;[0, 20)&quot;, &quot;[20, Inf)&quot;))
+
+# Fit Poisson equivalent model of piecewise exponential
+fit = glm(event ~ offset(log(exposure)) + interval * arm - 1, 
+          family = poisson, data = survival_data)
+
+estimated_rate1 &lt;- exp(fit$coefficients[1])
+estimated_rate2 &lt;- exp(fit$coefficients[2])
+estimated_hr1 &lt;- exp(fit$coefficients[3])
+estimated_hr2 &lt;- exp(fit$coefficients[3] + fit$coefficients[4])
+exp(fit$coefficients[4])</code></pre>
+<pre><code>## interval[20, Inf):armtrt 
+##                0.7908511</code></pre>
 </div>

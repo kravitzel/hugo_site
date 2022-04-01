@@ -1,0 +1,299 @@
+---
+title: "2022 02 11 Tidy Censoring With dplyr"
+subtitle: ""
+excerpt: ""
+date: 2022-02-11T09:21:56-05:00
+author: "Eli Kravitz"
+draft: true
+series:
+tags:
+categories:
+layout: single # single or single-sidebar
+---
+
+```{r setup, include = FALSE}
+library(tidyverse)
+library(scales)
+library(kableExtra)
+
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+This post will give guidance for simulating survival times with censoring. We'll cover Type II censoring ("administrative" censoring) and right censoring.
+
+# Simulating Data
+
+## Survival Times
+We'll simulate hypothetical data from a two arm clinical trial with a time-to-event endpoint. A total of 1000 patients are randomized 1:1 to each arm.
+
+Denote the $i^{th}$ survival times with $T_{i}$ . Let $X_i$ denote assignment to the treatment arm. So $X_i = 0$ if subject $i$ is assigned to the control arm and $X_i = 1$ if a subject is assigned to the treatment arm. We'll assume that survival times for all patients follow an exponential distribution with hazard function $h(t_i) = \lambda \cdot \exp(\beta X_i)$, where $\beta$ is the log-hazard ratio (treatment effect) between the two arms.
+
+We'll assume patients on the control arm have a median time-to-event of 10 months. This corresponds $\lambda = \frac{\log2}{10}$ in the model above. Assume the treatment doubles survival time, with a corresponding hazard ratio of $exp(\beta) = 0.50$.
+
+```{r simulate-times, message=FALSE, warning=FALSE}
+set.seed(123)
+lambda <- log(2) / 10
+hr <- 0.50
+n_per_arm <- 500
+
+patient_df <- tibble(
+  patient_id = seq(1, 2 * n_per_arm),
+  arm = rep(c("ctrl", "trt"), each = n_per_arm),
+  surv_time = c(rexp(n_per_arm, log(2) / 10), rexp(n_per_arm, log(2) / 10 * hr))
+)
+```
+
+Let's make sure our simulated data matches our expectation. The median survival is what we expect for both arms. 
+
+```{r check-data-medians}
+patient_df %>% 
+  group_by(arm) %>%
+  summarize("Median Survival" = median(surv_time)) %>%
+  kableExtra::kbl(digits = 1) %>%
+  kable_paper("hover", full_width = F)
+```
+
+Let's plot both arms to get an idea of what the distribution looks like.
+
+```{r plot_histogram, include = FALSE}
+patient_df %>% 
+  mutate(arm_pretty = if_else(arm == "ctrl", "Control", "Treatment")) %>% 
+  ggplot() +
+  geom_histogram(
+    aes(x = surv_time),
+    color = "white",
+    binwidth = 5
+  )  +
+  labs(
+    x = "Survival Time",
+    y = element_blank()
+  ) + 
+  facet_grid(rows = vars(arm_pretty)) + 
+  theme_minimal()
+
+
+```
+
+## Type II Censoring
+
+An experiment may end when a prespecified number of events occur. All subjects without a survival event are right censored. This is called right censoring.  
+
+```{r fig.cap="Type II Censoring", echo = FALSE}
+df = tibble(
+  ID = paste0("Subject ", seq(1, 5)),
+  t = c(5, 3, 5, 2, 5),
+  censored = factor(c("event", "event", "censor", "event", "censor"), 
+                    levels = c("event", "censor"))
+)
+
+
+event_color = c(event = "firebrick2", censor = "goldenrod2")
+
+
+ggplot(df, aes(x = ID)) +
+  # Censoring line 
+  geom_hline(
+    yintercept = 5,
+    linetype = "dashed"
+  ) + 
+  # Plot people with events -----------------------------------
+geom_segment( # Red line segment
+  data = filter(df, censored == "event"),
+  mapping = aes(x = ID, y = -Inf, xend = ID,  yend = t),
+  size = 1.5,
+  color = event_color[["event"]]
+) +
+  geom_point( # Red X's for event times
+    data = filter(df, censored == "event"),
+    mapping = aes(x = ID, y = t),
+    color = event_color[["event"]],
+    shape = 4, # X as shape
+    stroke = 2
+  ) + 
+  # Plot censored people -----------------------------------------
+geom_segment( # Red line segment
+  data = filter(df, censored == "censor"),
+  mapping = aes(x = ID, y = -Inf, xend = ID,  yend = t),
+  color = event_color[["censor"]],
+  size = 1.5
+) + 
+  geom_point( # Red X's for event times
+    data = filter(df, censored == "censor"),
+    mapping = aes(x = ID, y = t),
+    color = event_color[["censor"]],
+    shape = 17, # triangle as shape
+    size = 4,
+  ) + 
+  labs(
+    x = element_blank(),
+    y = element_blank()
+  ) + 
+  coord_flip(
+    ylim = c(0, 6),
+  ) +
+  theme_classic() + 
+  theme(
+    axis.title.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.text.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.y = element_blank()
+  ) 
+
+```
+
+
+In our example, we'll stop the trial when we've observed that $80\%$ of patients have had an event. This corresponds to `r nrow(patient_df) * 0.80` events. The remaining `r nrow(patient_df) * 0.20` will be censored
+
+In `dplyr`, we can use `nth()` function to find the time when the experiment ends. Then we use `ifelse()` to replace censored survival time with the time the experiment ends.
+
+```{r}
+
+censor_time <- nth(patient_df$surv_time, n = 800L, order_by = patient_df$surv_time)
+
+patient_df = patient_df %>%
+  mutate(
+    event = surv_time <= censor_time,
+    obs_time = ifelse(!event, censor_time, surv_time),
+  )
+```
+
+## Arrival Times and Censoring 
+
+Patients don't begin a clinical trial at the same time. Their entry into the trial is staggered; the sponsor finds new sites and recruits new patients. It can take months or years to recruit patients. As we'll see, this affects censoring.
+
+We'll assume that patients join the trial uniformally over a 6 month period: $A_i \sim U[0, 6]$. We add these arrival times to patient's survival times. This represents time relative to the start of the trial, when asubject will have an event.
+
+```{r arrival-times}
+with_arrivals <-
+  patient_df %>% 
+  mutate(
+    arrival_time = runif(n(), 0, 6),
+    relative_time = arrival_time + surv_time
+  )
+```
+
+```{r arrival_plot, echo = FALSE}
+
+df = tibble(
+  ID = paste0("Subject ", seq(1, 5)),
+  arrival_time = c(1, 2, 0.5, 3.5, 2.5),
+  t = c(5, 4.5, 1.5, 4, 3),
+  censored = factor(c("censor", "event", "event", "censor", "event"), 
+                    levels = c("event", "censor"))
+)
+
+event_color = c(event = "firebrick2", censor = "goldenrod2")
+ggplot(df, aes(x = ID)) +
+  # Censoring line 
+  geom_hline(
+    yintercept = 5,
+    linetype = "dashed",
+    color = "darkgrey"
+  ) + 
+  # Plot people with events -----------------------------------
+geom_segment( # Red line segment
+  data = filter(df, censored == "event"),
+  mapping = aes(x = ID, y = arrival_time, xend = ID,  yend = t),
+  size = 1.5,
+  color = event_color[["event"]]
+) +
+  geom_point( # Red X's for event times
+    data = filter(df, censored == "event"),
+    mapping = aes(x = ID, y = t),
+    color = event_color[["event"]],
+    shape = 4, # X as shape
+    stroke = 2
+  ) + 
+  geom_point( # white circle with border for arrival time
+    data = filter(df, censored == "event"),
+    mapping = aes(x = ID, y = arrival_time),
+    color = event_color[["event"]],
+    fill = "white",
+    shape = 21,
+    size = 3
+  ) + 
+  # Plot censored people -----------------------------------------
+geom_segment( # Red line segment
+  data = filter(df, censored == "censor"),
+  mapping = aes(x = ID, y = arrival_time, xend = ID,  yend = t),
+  color = event_color[["censor"]],
+  size = 1.5
+) + 
+  geom_point( # Red X's for event times
+    data = filter(df, censored == "censor"),
+    mapping = aes(x = ID, y = t),
+    color = event_color[["censor"]],
+    shape = 17, # triangle as shape
+    size = 4,
+  ) + 
+    geom_point( # white circle with border for arrival time
+    data = filter(df, censored == "censor"),
+    mapping = aes(x = ID, y = arrival_time),
+    color = event_color[["censor"]],
+    fill = "white",
+    shape = 21,
+    size = 3
+  ) + 
+  # Theme ---------------------------------
+  labs(
+    x = element_blank(),
+    y = element_blank()
+  ) + 
+  coord_flip(
+    ylim = c(0, 6),
+  ) +
+  theme_classic() + 
+  theme(
+    axis.title.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.text.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.y = element_blank()
+  ) +
+  annotate(
+    "text",
+    label = "Censoring time",
+    y = 5.4,
+    x = 0.8,
+    color = "darkgrey"
+  )
+  
+
+
+```
+
+
+
+<!-- Let's examine this on a subset of our data -->
+<!-- ```{r arrival-times-preview, echo=FALSE} -->
+<!-- set.seed(1) -->
+<!-- with_arrivals %>%  -->
+<!--   sample_n(5) %>%  -->
+<!--   select(patient_id, arrival_time, surv_time, relative_time) %>%  -->
+<!--   kbl(digits = 1) %>%  -->
+<!--   kable_paper("hover", full_width = F) -->
+<!-- ``` -->
+
+
+## Arrival Times and Censoring Type II ("Administrative") Censoring
+
+We'll use the tools from the previous section to the time of censoring with arrivals. We find the calendar time when`r nrow(patient_df) * 0.80` events occur
+
+We can get the time of the 400th event with `nth(relative_time, n = 400, order_by = relative_time) = ` `r with(with_arrivals, nth(relative_time, n = 400, order_by = relative_time)) %>% round(1)`
+
+```{r}
+censor_time = with(with_arrivals, nth(relative_time, n = 400, order_by = relative_time))
+
+  
+with_arrivals %>% 
+  mutate(
+    event = relative_time <= censor_time,
+    obs_time = ifelse(!event, censor_time - arrival_time, surv_time),
+  )
+
+```
+
+
+
+
