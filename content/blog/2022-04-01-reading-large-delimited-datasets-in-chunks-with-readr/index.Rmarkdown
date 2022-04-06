@@ -19,13 +19,23 @@ Sometimes you have a dataset that's too large to fit in memory.  One way to get 
 You can read deliminated data in chunks by using any of the  [`read_*_chunked()` functions](https://readr.tidyverse.org/reference/read_delim_chunked.html) from the [`readr` package](https://readr.tidyverse.org/index.html). I'll focus on `read_csv_chunked()`. I'll use a CSV version of the mtcars
 
 
+The function requires at least two arguments:`read_csv_chunked(file, callback)`.  `file` is the file path of of your`.csv` file. The `calllback` argument is a little more complicated. The [documentation](https://readr.tidyverse.org/reference/callback.html#ref-examples) is spare for this and doesn't have great examples. 
+
+Callbacks tell R what action to take when it's done reading a chunk. There are three classes of of callbacks that you're likely to use. Each callback applies a function `f()` to the chunk before returning a value (more on that later). 
+
+1. `DataFrameCallback` - Apply `f` to each chunk then combine results of `f(chunk)` by appending rows  into a `tibble`
+    + Example: Read each chunk -> Remove records that don't meet condition  --> append rows
+2. `SideEffectChunkCallback` - Apply `f` to reach chunk and return nothing
+    + Example: Reach each chunk --> write each chunk to a `.parquet ` file 
+3. `AccumulateCallBack` - Accumulates a single result across chunks
+    + Example: Count the number of distinct IDs in each chunk --> add them together 
+
+To use a callback in `read_csv_chunked` you declare the function to apply to each chunk then make a new `ChunkCallback` class. The function must have the arguments `data` and `index`. **You must include `index` even if your function does not use this argument.** !!Add link to Stack overflow question.
+
 ```{r}
 
 
-
 ```
-
-
 ## Why didn't you use XYZ?
 
 Why didn't *you* use XYZ?
