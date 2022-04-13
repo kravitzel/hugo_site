@@ -2,9 +2,9 @@
 title: "Reading large delimited datasets in chunks with readr"
 subtitle: ""
 excerpt: ""
-date: 04/13/2022
+date: 2022-04-13
 author: "Eli S. Kravitz"
-draft: true
+draft: false
 series:
 tags:
 categories:
@@ -13,7 +13,7 @@ layout: single # single or single-sidebar
 
 ## Use Case
 
-I recently had to work with several large CSV files, ranging in size from 8Gb to 12Gb. I needed to `dplyr::group_by()` a categorical variable and count the number of unique records with `dplyr::n_distinct()`.  I ran out of RAM whenever I loaded the entire dataset into R with `readr::read_csv()` or `data.table::fread()`.  I tried to load the data in chunks (see more below), but found the existing documentation to be confusing and piecemeal. I've provided a system that works for me in the blog post.
+I recently had to work with several large CSV files, ranging in size from 8Gb to 12Gb. I needed to use `dplyr::group_by()` a categorical variable and count the number of unique records in each group with `dplyr::n_distinct()`.  I ran out of RAM whenever I loaded the entire dataset into R with `readr::read_csv()` or `data.table::fread()`.  I tried to load the data in chunks (see more below), but found the existing documentation to be confusing and piecemeal. I collected what I learned into this blog post.
 
 ## What is chunking?
 
@@ -21,23 +21,23 @@ Sometimes you have a dataset that's too large to fit in memory.  One way to get 
 
 ## Chunks in readr
 
-You can read deliminated data in chunks by using any of the  [`read_*_chunked()` functions](https://readr.tidyverse.org/reference/read_delim_chunked.html) from the [`readr` package](https://readr.tidyverse.org/index.html). I'll focus on `read_csv_chunked()`. I'll use a CSV version of the mtcars
+You can read deliminated data in chunks by using any of the  [`read_*_chunked()` functions](https://readr.tidyverse.org/reference/read_delim_chunked.html) from the [`readr` package](https://readr.tidyverse.org/index.html). I'll focus on `read_csv_chunked()` using a CSV file of the mtcars `dataset`.
 
 
-The function requires at least two arguments:`read_csv_chunked(file, callback)`.  `file` is the file path of of your`.csv` file. The `calllback` argument is a little more complicated. The [documentation](https://readr.tidyverse.org/reference/callback.html#ref-examples) is sparse for this and [aimed at power-users](https://github.com/tidyverse/readr/issues/510#issuecomment-242363754).
+`readr::read_csv_chunked()` requires at least two arguments:`read_csv_chunked(file, callback)`.  `file` is the file path of of your`.csv` file. The `calllback` argument is a little more complicated. The [documentation](https://readr.tidyverse.org/reference/callback.html#ref-examples) is sparse for this and [aimed at power-users](https://github.com/tidyverse/readr/issues/510#issuecomment-242363754).
 
-Callbacks tell R what action to take when it's done reading a chunk. There are three classes of of callbacks that you're likely to use. Each callback applies a function `f()` to the chunk before returning a value. 
+Callbacks tell R what action to take after it finishes reading a data chunk into memory.  There are three classes of of callbacks that you're likely to use. Each callback applies a function `f()` to the chunk before returning a value. 
 
 1. `DataFrameCallback` - Apply `f` to each chunk then combine results of `f(chunk)` by appending rows  into a `tibble`
-    + Example: Read each chunk -> Remove records that don't meet condition  --> append rows
+    + Example: Read each chunk -> Remove records that don't meet a condition  --> append rows
 2. `SideEffectChunkCallback` - Apply `f` to reach chunk and return nothing
     + Example: Reach each chunk --> write each chunk to a `.parquet ` file 
-3. `AccumulateCallBack` - Accumulates a single result across chunks
+3. `AccumulateCallBack` - Calculates single result, carrying the value across chunks ("accumulate")
     + Example: Count the number of distinct IDs in each chunk --> add them together 
 
-To use a callback in `read_csv_chunked` you declare the function to apply to each chunk then make a new `ChunkCallback` class. The function must have the arguments `data` and `pos`. The `data` argument holds the current data.frame chunk and `pos` (short for position) holds the line number that the current chunk begins on.   **You must include `pos` in your function arguments even if function does not use it.** If you use `AccumulateCallBack` you must include a third argument, `acc`, which stores the current value of their accumulator. 
+To use a callback in `read_csv_chunked` you first declare the function to apply to each chunk. The function must have the two arguments: `data` and `pos`. The `data` argument holds the current data chunk and `pos` (short for position) holds the line number that the current chunk begins on.   **You must include `pos` in your function arguments even if function does not use it.** If you use `AccumulateCallBack` you must include a third argument, `acc`, which stores the current value of their accumulator. You need to give a `acc` a default value in the function definition, for example `f = function(..., acc = NA)` or `f = function(..., acc = 0)`
 
-We'll use a simple example to show how read a `.csv` file in chunks with a custom callback function. We load `mtcars` in chunks and keep cars with manual transmission (`am == 0`) and miles/gallon over over 20 (`mpg >= 20`).
+The simple example below shows how read a `.csv` file in chunks with a custom callback function. We load `mtcars` in chunks and keep cars with manual transmission (`am == 0`) and miles/gallon over over 20 (`mpg >= 20`).
 
 ```{r message=FALSE, warning=FALSE}
 library(readr)
