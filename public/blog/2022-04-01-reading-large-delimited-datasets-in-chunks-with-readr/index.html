@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr"><head>
+  
+                           
+     
+
+
+<meta charset="UTF-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta name="generator" content="Hugo 0.92.0" />
+<title>Reading large delimited datasets in chunks with readr | Eli Kravitz</title>
+
+
+<meta property="twitter:site" content="@KravitzEl">
+<meta property="twitter:creator" content="@KravitzEl">
+
+
+
+
+
+
+
+  
+    
+  
+<meta name="description" content="Statistics, Data Science, and Programming Blog for Eli S. Kravitz">
+
+
+<meta property="og:site_name" content="Eli Kravitz">
+<meta property="og:title" content="Reading large delimited datasets in chunks with readr | Eli Kravitz">
+<meta property="og:description" content="Statistics, Data Science, and Programming Blog for Eli S. Kravitz" />
+<meta property="og:type" content="page" />
+<meta property="og:url" content="https://hugo-apero-docs.netlify.app/blog/2022-04-01-reading-large-delimited-datasets-in-chunks-with-readr/" />
+<meta property="og:locale" content="en">
+
+
+
+
+    
+        <meta property="og:image" content="https://hugo-apero-docs.netlify.app/blog/2022-04-01-reading-large-delimited-datasets-in-chunks-with-readr/featured.jpg" >
+        <meta property="twitter:card" content="summary_large_image">
+        <meta name="twitter:image" content="https://hugo-apero-docs.netlify.app/blog/2022-04-01-reading-large-delimited-datasets-in-chunks-with-readr/featured.jpg" >
+    
+    
+  <meta itemprop="name" content="Reading large delimited datasets in chunks with readr">
+<meta itemprop="description" content="Use Case     I recently had to work with several large CSV files, ranging in size from 8Gb to 12Gb. I needed to use dplyr::group_by() a categorical variable and count the number of unique records in each group with dplyr::n_distinct(). I ran out of RAM whenever I loaded the entire dataset into R with readr::read_csv() or data.table::fread(). I tried to load the data in chunks (see more below), but found the existing documentation to be confusing and piecemeal."><meta itemprop="datePublished" content="2022-04-13T00:00:00+00:00" />
+<meta itemprop="dateModified" content="2022-04-13T00:00:00+00:00" />
+<meta itemprop="wordCount" content="758"><meta itemprop="image" content="https://hugo-apero-docs.netlify.app/blog/2022-04-01-reading-large-delimited-datasets-in-chunks-with-readr/featured.jpg">
+<meta itemprop="keywords" content="" />
+  
+  
+  <!--[if IE]><script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script><![endif]-->
+  <link rel="shortcut icon" href="/img/favicon.ico" type="image/x-icon">
+  <link rel="icon" href="/img/favicon.ico" type="image/x-icon">
+  
+  
+  <link rel="stylesheet" href="/style.main.min.6ecb9b49efa46b01fd02d9fe3d7dd0890ce6eb590458a6d6b0635fadecb1f077.css" integrity="sha256-bsubSe&#43;kawH9Atn&#43;PX3QiQzm61kEWKbWsGNfreyx8Hc=" media="screen">
+  
+  
+  <script src="/panelset.min.078a92db9bd3228df502db3d9e0453c3cf3d910abe3f8deca0ad196c7071ad41.js" type="text/javascript"></script>
+  
+  
+  <script src="/main.min.a8d5786dfa385cd4ed8445c0f58748b85a995704e8729975009c2115d3043d8b.js" type="text/javascript"></script>
+</head>
+<body>
+      <div class="grid-container single">
+<header class="site-header pt4 pb2 mb4 bb b--transparent ph5 headroom z-max" role="banner">
+  <nav class="site-nav db dt-l w-100" role="navigation">
+    <a class="site-brand db dtc-l v-mid link no-underline w-100 w-33-l tc tl-l" href="https://hugo-apero-docs.netlify.app/" title="Home">
+      <img src="/img/blogophonic-mark-dark.png" class="dib db-l h2 w-auto" alt="Eli Kravitz">
+    </a>
+    <div class="site-links db dtc-l v-mid w-100 w-47-l tc tr-l mt3 mt0-l ttu tracked">
+      
+        
+        
+        
+      <a class="link f6 f5-l dib pv1 ph2 " href="/about/" title="About Eli">About</a>
+      
+        
+        
+        
+      <a class="link f6 f5-l dib pv1 ph2 active" href="/blog/" title="Blog">Blog</a>
+      
+        
+        
+        
+      <a class="link f6 f5-l dib pv1 ph2 " href="/project/" title="Project Portfolio">Projects</a>
+      
+        
+        
+        
+      <a class="link f6 f5-l dib pv1 ph2 " href="/talk/" title="Talks">Talks</a>
+      
+        
+        
+        
+      <a class="link f6 f5-l dib pv1 ph2 " href="/elements/" title="Element Page">Elements</a>
+      
+      
+    </div>
+  </nav>
+</header>
+
+<main class="page-main pa4" role="main">
+  <section class="page-content mw7 center">
+    <article class="post-content pa0 ph4-l">
+      <header class="post-header">
+        <h1 class="f1 lh-solid measure-narrow mb3 fw4">Reading large delimited datasets in chunks with readr</h1>
+        
+        <p class="f6 measure lh-copy mv1">By Eli S. Kravitz</p>
+        <p class="f7 db mv0 ttu">April 13, 2022</p>
+
+      
+
+      </header>
+      <section class="post-body pt5 pb4">
+        
+
+
+
+<h2 id="use-case">Use Case
+  <a href="#use-case"><svg class="anchor-symbol" aria-hidden="true" height="26" width="26" viewBox="0 0 22 22" xmlns="http://www.w3.org/2000/svg">
+      <path d="M0 0h24v24H0z" fill="currentColor"></path>
+      <path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76.0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71.0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71.0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76.0 5-2.24 5-5s-2.24-5-5-5z"></path>
+    </svg></a>
+</h2>
+<p>I recently had to work with several large CSV files, ranging in size from 8Gb to 12Gb. I needed to use <code>dplyr::group_by()</code> a categorical variable and count the number of unique records in each group with <code>dplyr::n_distinct()</code>.  I ran out of RAM whenever I loaded the entire dataset into R with <code>readr::read_csv()</code> or <code>data.table::fread()</code>.  I tried to load the data in chunks (see more below), but found the existing documentation to be confusing and piecemeal. I collected what I learned into this blog post.</p>
+
+
+
+
+<h2 id="what-is-chunking">What is chunking?
+  <a href="#what-is-chunking"><svg class="anchor-symbol" aria-hidden="true" height="26" width="26" viewBox="0 0 22 22" xmlns="http://www.w3.org/2000/svg">
+      <path d="M0 0h24v24H0z" fill="currentColor"></path>
+      <path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76.0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71.0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71.0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76.0 5-2.24 5-5s-2.24-5-5-5z"></path>
+    </svg></a>
+</h2>
+<p>Sometimes you have a dataset that&rsquo;s too large to fit in memory.  One way to get around this is to divide your data into subsets (&ldquo;chunks&rdquo;) that do fit into memory and process each chunk separately. You can aggregate the processed chunks together after you&rsquo;ve reduced the size. This is basically a low-tech implementation of the 
+<a href="https://en.wikipedia.org/wiki/MapReduce#Overview" target="_blank" rel="noopener">MapReduce</a> framework used 
+<a href="https://www.ibm.com/cloud/blog/hadoop-vs-spark" target="_blank" rel="noopener">Apache Hadoop</a></p>
+
+
+
+
+<h2 id="chunks-in-readr">Chunks in readr
+  <a href="#chunks-in-readr"><svg class="anchor-symbol" aria-hidden="true" height="26" width="26" viewBox="0 0 22 22" xmlns="http://www.w3.org/2000/svg">
+      <path d="M0 0h24v24H0z" fill="currentColor"></path>
+      <path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76.0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71.0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71.0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76.0 5-2.24 5-5s-2.24-5-5-5z"></path>
+    </svg></a>
+</h2>
+<p>You can read deliminated data in chunks by using any of the  
+<a href="https://readr.tidyverse.org/reference/read_delim_chunked.html" target="_blank" rel="noopener"><code>read_*_chunked()</code> functions</a> from the 
+<a href="https://readr.tidyverse.org/index.html" target="_blank" rel="noopener"><code>readr</code> package</a>. I&rsquo;ll focus on <code>read_csv_chunked()</code> using a CSV file of the mtcars <code>dataset</code>.</p>
+<p><code>readr::read_csv_chunked()</code> requires at least two arguments:<code>read_csv_chunked(file, callback)</code>.  <code>file</code> is the file path of of your<code>.csv</code> file. The <code>calllback</code> argument is a little more complicated. The 
+<a href="https://readr.tidyverse.org/reference/callback.html#ref-examples" target="_blank" rel="noopener">documentation</a> is sparse for this and 
+<a href="https://github.com/tidyverse/readr/issues/510#issuecomment-242363754" target="_blank" rel="noopener">aimed at power-users</a>.</p>
+<p>Callbacks tell R what action to take after it finishes reading a data chunk into memory.  There are three classes of of callbacks that you&rsquo;re likely to use. Each callback applies a function <code>f()</code> to the chunk before returning a value.</p>
+<ol>
+<li><code>DataFrameCallback</code> - Apply <code>f</code> to each chunk then combine results of <code>f(chunk)</code> by appending rows  into a <code>tibble</code>
+<ul>
+<li>Example: Read each chunk -&gt; Remove records that don&rsquo;t meet a condition  &ndash;&gt; append rows</li>
+</ul>
+</li>
+<li><code>SideEffectChunkCallback</code> - Apply <code>f</code> to reach chunk and return nothing
+<ul>
+<li>Example: Reach each chunk &ndash;&gt; write each chunk to a <code>.parquet </code> file</li>
+</ul>
+</li>
+<li><code>AccumulateCallBack</code> - Calculates single result, carrying the value across chunks (&ldquo;accumulate&rdquo;)
+<ul>
+<li>Example: Count the number of distinct IDs in each chunk &ndash;&gt; add them together</li>
+</ul>
+</li>
+</ol>
+<p>To use a callback in <code>read_csv_chunked</code> you first declare the function to apply to each chunk. The function must have the two arguments: <code>data</code> and <code>pos</code>. The <code>data</code> argument holds the current data chunk and <code>pos</code> (short for position) holds the line number that the current chunk begins on.   <strong>You must include <code>pos</code> in your function arguments even if function does not use it.</strong> If you use <code>AccumulateCallBack</code> you must include a third argument, <code>acc</code>, which stores the current value of their accumulator. You need to give a <code>acc</code> a default value in the function definition, for example <code>f = function(..., acc = NA)</code> or <code>f = function(..., acc = 0)</code></p>
+<p>The simple example below shows how read a <code>.csv</code> file in chunks with a custom callback function. We load <code>mtcars</code> in chunks and keep cars with manual transmission (<code>am == 0</code>) and miles/gallon over over 20 (<code>mpg &gt;= 20</code>).</p>
+<div class="highlight"><pre tabindex="0" style="background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-r" data-lang="r"><span style="color:#900;font-weight:bold">library</span>(readr)
+<span style="color:#900;font-weight:bold">library</span>(dplyr)
+<span style="color:#998;font-style:italic"># data(mtcars); write_csv(mtcars, &#34;mtcars.csv&#34;)</span>
+
+<span style="color:#998;font-style:italic"># Function to pass to DataFrameCallback$new()</span>
+f <span style="color:#000;font-weight:bold">=</span> <span style="color:#900;font-weight:bold">function</span>(data, pos) {  <span style="color:#998;font-style:italic"># pos must be an  argument even though unused</span>
+  data <span style="color:#000;font-weight:bold">%&gt;%</span> 
+    <span style="color:#900;font-weight:bold">filter</span>(am <span style="color:#000;font-weight:bold">==</span> <span style="color:#099">0L</span>, mpg <span style="color:#000;font-weight:bold">&gt;=</span> <span style="color:#099">20</span>)
+}
+
+chunked_df <span style="color:#000;font-weight:bold">=</span> <span style="color:#900;font-weight:bold">read_csv_chunked</span>(
+  file <span style="color:#000;font-weight:bold">=</span> <span style="color:#d14">&#34;mtcars.csv&#34;</span>,
+  callback <span style="color:#000;font-weight:bold">=</span> DataFrameCallback<span style="color:#000;font-weight:bold">$</span><span style="color:#900;font-weight:bold">new</span>(f),
+  chunk_size <span style="color:#000;font-weight:bold">=</span> <span style="color:#099">5L</span>
+)
+
+chunked_df
+</code></pre></div><pre tabindex="0"><code>## # A tibble: 4 x 11
+##     mpg   cyl  disp    hp  drat    wt  qsec    vs    am  gear  carb
+##   &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt;
+## 1  21.4     6  258    110  3.08  3.22  19.4     1     0     3     1
+## 2  24.4     4  147.    62  3.69  3.19  20       1     0     4     2
+## 3  22.8     4  141.    95  3.92  3.15  22.9     1     0     4     2
+## 4  21.5     4  120.    97  3.7   2.46  20.0     1     0     3     1
+</code></pre>
+
+
+
+<h2 id="why-didnt-you-use-xyz">Why didn&rsquo;t you use XYZ?
+  <a href="#why-didnt-you-use-xyz"><svg class="anchor-symbol" aria-hidden="true" height="26" width="26" viewBox="0 0 22 22" xmlns="http://www.w3.org/2000/svg">
+      <path d="M0 0h24v24H0z" fill="currentColor"></path>
+      <path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76.0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71.0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71.0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76.0 5-2.24 5-5s-2.24-5-5-5z"></path>
+    </svg></a>
+</h2>
+<p><em>Why didn&rsquo;t <strong>you</strong> use XYZ?</em></p>
+<p>There are options for reading chunked data inside and outside of R.</p>
+<ul>
+<li>Python&rsquo;s 
+<a href="https://pandas.pydata.org/docs/reference/api/pandas.read_csv.html" target="_blank" rel="noopener"><code>pandas.read_csv(..., chunksize)</code></a> returns an 
+<a href="https://wiki.python.org/moin/Iterator" target="_blank" rel="noopener">iterator</a> to read a read a 
+<a href="https://pythonspeed.com/articles/chunking-pandas/" target="_blank" rel="noopener">CSV in chunks</a>. This is a good option if you&rsquo;re okay leaving the R and tidyverse ecosystem.</li>
+<li>R&rsquo;s 
+<a href="https://cran.r-project.org/web/packages/LaF/index.html" target="_blank" rel="noopener"><code>LaF</code> package</a>  offers fast, random access to ASCII files without loading the file into memory. <code>read_chunkwise()</code> from the 
+<a href="https://cran.r-project.org/web/packages/chunked/index.html" target="_blank" rel="noopener"><code>chunked</code> package</a> is a wrapper that provides <code>dplyr</code> like synatx to <code>Laf</code>. I couldn&rsquo;t get either package to work, and I couldn&rsquo;t diagnose the problem from the error messages.</li>
+<li><code>fread(...,)</code> from <code>data.table</code> can read files in chunks using the <code>skip</code> and <code>nrows</code> arguments. However, the user has to manually 
+<a href="https://stackoverflow.com/a/60085589/2838936" target="_blank" rel="noopener">program this functionality</a>. Things get complicated if you want to keep column names or apply a function to each chunk.</li>
+</ul>
+
+        
+        <details closed class="f6 fw7 input-reset">
+  <dl class="f6 lh-copy">
+    <dt class="fw7">Posted on:</dt>
+    <dd class="fw5 ml0">April 13, 2022</dd>
+  </dl>
+  <dl class="f6 lh-copy">
+    <dt class="fw7">Length:</dt>
+    <dd class="fw5 ml0">4 minute read, 758 words</dd>
+  </dl>
+  
+  
+  
+  <dl class="f6 lh-copy">
+    <dt class="fw7">See Also:</dt>
+    
+  </dl>
+</details>
+
+      </section>
+      <footer class="post-footer">
+        <div class="post-pagination dt w-100 mt4 mb2">
+  
+  
+  
+  
+    <a class="next dtc pl2 tr v-top fw6"
+    href="https://hugo-apero-docs.netlify.app/blog/social/">Set up your social &rarr;</a>
+  
+</div>
+
+      </footer>
+    </article>
+    
+      
+<div class="post-comments pa0 pa4-l mt4">
+  
+  <script src="https://utteranc.es/client.js"
+          repo="apreshill/apero"
+          issue-term="pathname"
+          theme="boxy-light"
+          label="comments :crystal_ball:"
+          crossorigin="anonymous"
+          async
+          type="text/javascript">
+  </script>
+  
+</div>
+
+    
+  </section>
+</main>
+<footer class="site-footer pv4 bt b--transparent ph5" role="contentinfo">
+  <nav class="db dt-l w-100">
+    <p class="site-copyright f7 db dtc-l v-mid w-100 w-33-l tc tl-l pv2 pv0-l mv0 lh-copy">
+      &copy; 2022 Eli Kravitz
+      <span class="middot-divider"></span>
+      Made with <span xmlns:dct="http://purl.org/dc/terms/" property="dct:title"><a xmlns:dct="http://purl.org/dc/terms/" href="https://github.com/hugo-apero/" rel="dct:source">Hugo Apéro</a></span>.
+      <br />
+      
+Based on <span xmlns:dct="http://purl.org/dc/terms/" property="dct:title"><a xmlns:dct="http://purl.org/dc/terms/" href="https://github.com/formspree/blogophonic-hugo" rel="dct:source">Blogophonic</a></span> by <a xmlns:cc="http://creativecommons.org/ns#" href="https://formspree.io" property="cc:attributionName" rel="cc:attributionURL">Formspree</a>.
+    </p>
+    
+    <div class="site-social-links db dtc-l v-mid w-100 w-33-l tc pv2 pv0-l mv0">
+      <div class="social-icon-links" aria-hidden="true">
+  
+  
+    
+    
+    
+      
+    
+    
+    
+    
+    
+      
+    
+    <a class="link dib h1 w1 ml0 mr2 f6 o-90 glow" href="https://github.com/apreshill/apero" title="github" target="_blank" rel="noopener">
+      <i class="fab fa-github fa-lg fa-fw"></i>
+    </a>
+  
+    
+    
+    
+      
+    
+    
+    
+    
+    
+      
+    
+    <a class="link dib h1 w1 ml0 mr2 f6 o-90 glow" href="https://www.instagram.com/explore/tags/apero/" title="instagram" target="_blank" rel="noopener">
+      <i class="fab fa-instagram fa-lg fa-fw"></i>
+    </a>
+  
+    
+    
+    
+      
+    
+    
+    
+    
+    
+      
+    
+    <a class="link dib h1 w1 ml0 mr2 f6 o-90 glow" href="https://twitter.com/hashtag/ap%c3%a9ro" title="twitter" target="_blank" rel="noopener">
+      <i class="fab fa-twitter fa-lg fa-fw"></i>
+    </a>
+  
+    
+    
+    
+    
+    
+    
+    
+      
+    
+    <a class="link dib h1 w1 ml0 mr2 f6 o-90 glow" href="http://orcid.org/0000-0002-8082-1890" title="orcid" target="_blank" rel="noopener">
+      <i class="ai ai-orcid fa-lg fa-fw"></i>
+    </a>
+  
+    
+    
+    
+      
+    
+    
+    
+    
+    
+      
+    
+    <a class="link dib h1 w1 ml0 mr2 f6 o-90 glow" href="/blog/index.xml" title="rss" >
+      <i class="fas fa-rss fa-lg fa-fw"></i>
+    </a>
+  
+</div>
+
+    </div>
+    
+    <div class="site-links f6 db dtc-l v-mid w-100 w-67-l tc tr-l pv2 pv0-l mv0">
+      
+      <a class="dib pv1 ph2 link" href="/license/" title="License">License</a>
+      
+      <a class="dib pv1 ph2 link" href="/contact/" title="Contact form">Contact</a>
+      
+    </div>
+  </nav>
+  
+    <script>
+
+    var i, text, code, codes = document.getElementsByTagName('code');
+    for (let i = 0; i < codes.length;) {
+      code = codes[i];
+      if (code.parentNode.tagName !== 'PRE' && code.childElementCount === 0) {
+        text = code.textContent;
+        if (/^\$[^$]/.test(text) && /[^$]\$$/.test(text)) {
+          text = text.replace(/^\$/, '\\(').replace(/\$$/, '\\)');
+          code.textContent = text;
+        }
+        if (/^\\\((.|\s)+\\\)$/.test(text) ||
+            /^\\\[(.|\s)+\\\]$/.test(text) ||
+            /^\$(.|\s)+\$$/.test(text) ||
+            /^\\begin\{([^}]+)\}(.|\s)+\\end\{[^}]+\}$/.test(text)) {
+          code.outerHTML = code.innerHTML;  
+          continue;
+        }
+      }
+      i++;
+    }
+</script>
+
+  
+    
+    
+      <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.13.13/dist/katex.min.css" integrity="sha384-RZU/ijkSsFbcmivfdRBQDtwuwVqK7GMOw6IMvKyeWL2K5UAlyp6WonmB8m7Jd0Hn" crossorigin="anonymous">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.13.13/dist/katex.min.js" integrity="sha384-pK1WpvzWVBQiP0/GjnvRxV4mOb0oxFuyRxJlk6vVw146n3egcN5C925NCP7a7BY8" crossorigin="anonymous"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.13.13/dist/contrib/auto-render.min.js" integrity="sha384-vZTG03m+2yp6N6BNi5iM4rW4oIwk5DfcNdFfxkk9ZWpDriOkXX8voJBFrAO7MpVl" crossorigin="anonymous" onload="renderMathInElement(document.body);"></script>
+
+
+
+    
+  
+  
+</footer>
+
+      </div>
+    </body>
+</html>
