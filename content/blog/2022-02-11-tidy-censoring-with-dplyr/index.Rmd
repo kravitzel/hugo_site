@@ -1,5 +1,5 @@
 ---
-title: "2022 02 11 Tidy Censoring With dplyr"
+title: "2022 02 11 Censored Survival Times With dplyr"
 subtitle: ""
 excerpt: ""
 date: 2022-02-11T09:21:56-05:00
@@ -19,19 +19,27 @@ library(kableExtra)
 knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 ```
 
-This post will give guidance for simulating survival times with censoring. We'll cover Type II censoring ("administrative" censoring) and right censoring.
+This post will give an overview for simulating survival times with right censoring. This post assumes basic familarity with survival analysis. Princeton's German Rodriguez has a [fantastic set of notes](https://data.princeton.edu/pop509) for anyone who needs to brush up on survival analysis. 
 
-# Simulating Data
+## Survival Times and Censoring 
+
+One of the unique features of survival analysis is that data is often partially observed (*censored*). Right censoring occurs when we know that a subject reached time $T$ but we do not know how far beyond $T$ their survival time extends. This can occur when an event (death, recurrence of disease, etc.) has yet to occur at the time of the analysis or when patient drops out a study before an event occurs. 
+
+Each observation $i$ has two potential outcomes: a failure time, $T_i$, and a censoring time $C_i$. If the failure time occurs before than the censoring time ($T_i > C_i$), the event time is observed. If the censoring time happens first ($C_i \geq T_i$), the event time is right censored.  Right censored survival times are described by the vector $(X_i, Y_i, \delta_i)$
+
++ $X_i$: is a covariate/feature vector
++ $\delta_i$ is a binary indicator of censoring. 
+  + $\delta_i = 1$ is the event time is censored and $\delta_i = 0$ otherwise
++ $Y_i = \min(T_i, C_i)$. 
+  + $Y_i = T_i$ when $\delta_i = 0$ and $Y_i = C_i$ when $\delta_i = 1$
 
 ## Survival Times
-We'll simulate hypothetical data from a two arm clinical trial with a time-to-event endpoint. A total of 1000 patients are randomized 1:1 to each arm.
+We'll simulate hypothetical data from a two arm  trial with a time-to-event endpoint. We assume 500 patients are randomzied to each arm at a 1:1 ratio for a total of 1000 patients. Let  $X_i = 0$ subject $i$ is assigned to the control arm and $X_i = 1$ if a subject is assigned to the treatment arm. 
 
-Denote the $i^{th}$ survival times with $T_{i}$ . Let $X_i$ denote assignment to the treatment arm. So $X_i = 0$ if subject $i$ is assigned to the control arm and $X_i = 1$ if a subject is assigned to the treatment arm. We'll assume that survival times for all patients follow an exponential distribution with hazard function $h(t_i) = \lambda \cdot \exp(\beta X_i)$, where $\beta$ is the log-hazard ratio (treatment effect) between the two arms.
-
-We'll assume patients on the control arm have a median time-to-event of 10 months. This corresponds $\lambda = \frac{\log2}{10}$ in the model above. Assume the treatment doubles survival time, with a corresponding hazard ratio of $exp(\beta) = 0.50$.
+Assume that survival times for all patients follow an exponential distribution with hazard function $h(t_i) = \lambda \cdot \exp(\beta X_i)$, where $\beta$ is the log-hazard ratio (treatment effect) between the treatment and control arm. Assume patients on the control arm have a median time-to-event of 10 months. This corresponds $\lambda = \frac{\log2}{10}$ in the model above. Assume the treatment doubles survival time to 20 month. This corresponds to hazard ratio of $\exp(\beta) = 0.50$.
 
 ```{r simulate-times, message=FALSE, warning=FALSE}
-set.seed(123)
+set.seed(11)
 lambda <- log(2) / 10
 hr <- 0.50
 n_per_arm <- 500
@@ -39,11 +47,11 @@ n_per_arm <- 500
 patient_df <- tibble(
   patient_id = seq(1, 2 * n_per_arm),
   arm = rep(c("ctrl", "trt"), each = n_per_arm),
-  surv_time = c(rexp(n_per_arm, log(2) / 10), rexp(n_per_arm, log(2) / 10 * hr))
+  surv_time = c(rexp(n_per_arm, lambda), rexp(n_per_arm, lambda * hr))
 )
 ```
 
-Let's make sure our simulated data matches our expectation. The median survival is what we expect for both arms. 
+Let's make sure our simulated data matches our expectation. The median survival is roughly what we expect for both arms. 
 
 ```{r check-data-medians}
 patient_df %>% 
@@ -76,9 +84,10 @@ patient_df %>%
 
 ## Type II Censoring
 
-An experiment may end when a prespecified number of events occur. All subjects without a survival event are right censored. This is called right censoring.  
+Type II censoring ("administrative censoring") occurs when an experiment ends when a prespecified number of events occur. This is the type of censoring that occurs with All subjects without a survival event are right censored.  
 
 ```{r fig.cap="Type II Censoring", echo = FALSE}
+
 df = tibble(
   ID = paste0("Subject ", seq(1, 5)),
   t = c(5, 3, 5, 2, 5),
@@ -87,7 +96,7 @@ df = tibble(
 )
 
 
-event_color = c(event = "firebrick2", censor = "goldenrod2")
+event_color = c(event = "firebrick2", censor = "navy")
 
 
 ggplot(df, aes(x = ID)) +

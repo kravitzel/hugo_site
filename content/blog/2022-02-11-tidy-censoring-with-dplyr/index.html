@@ -1,0 +1,154 @@
+---
+title: "2022 02 11 Censored Survival Times With dplyr"
+subtitle: ""
+excerpt: ""
+date: 2022-02-11T09:21:56-05:00
+author: "Eli Kravitz"
+draft: true
+series:
+tags:
+categories:
+layout: single # single or single-sidebar
+---
+
+<script src="{{< blogdown/postref >}}index_files/header-attrs/header-attrs.js"></script>
+<script src="{{< blogdown/postref >}}index_files/kePrint/kePrint.js"></script>
+<link href="{{< blogdown/postref >}}index_files/lightable/lightable.css" rel="stylesheet" />
+
+
+<p>This post will give an overview for simulating survival times with right censoring. This post assumes basic familarity with survival analysis. Princeton’s German Rodriguez has a <a href="https://data.princeton.edu/pop509">fantastic set of notes</a> for anyone who needs to brush up on survival analysis.</p>
+<div id="survival-times-and-censoring" class="section level2">
+<h2>Survival Times and Censoring</h2>
+<p>One of the unique features of survival analysis is that data is often partially observed (<em>censored</em>). Right censoring occurs when we know that a subject reached time <span class="math inline">\(T\)</span> but we do not know how far beyond <span class="math inline">\(T\)</span> their survival time extends. This can occur when an event (death, recurrence of disease, etc.) has yet to occur at the time of the analysis or when patient drops out a study before an event occurs.</p>
+<p>Each observation <span class="math inline">\(i\)</span> has two potential outcomes: a failure time, <span class="math inline">\(T_i\)</span>, and a censoring time <span class="math inline">\(C_i\)</span>. If the failure time occurs before than the censoring time (<span class="math inline">\(T_i &gt; C_i\)</span>), the event time is observed. If the censoring time happens first (<span class="math inline">\(C_i \geq T_i\)</span>), the event time is right censored. Right censored survival times are described by the vector <span class="math inline">\((X_i, Y_i, \delta_i)\)</span></p>
+<ul>
+<li><span class="math inline">\(X_i\)</span>: is a covariate/feature vector</li>
+<li><span class="math inline">\(\delta_i\)</span> is a binary indicator of censoring.
+<ul>
+<li><span class="math inline">\(\delta_i = 1\)</span> is the event time is censored and <span class="math inline">\(\delta_i = 0\)</span> otherwise</li>
+</ul></li>
+<li><span class="math inline">\(Y_i = \min(T_i, C_i)\)</span>.
+<ul>
+<li><span class="math inline">\(Y_i = T_i\)</span> when <span class="math inline">\(\delta_i = 0\)</span> and <span class="math inline">\(Y_i = C_i\)</span> when <span class="math inline">\(\delta_i = 1\)</span></li>
+</ul></li>
+</ul>
+</div>
+<div id="survival-times" class="section level2">
+<h2>Survival Times</h2>
+<p>We’ll simulate hypothetical data from a two arm trial with a time-to-event endpoint. We assume 500 patients are randomzied to each arm at a 1:1 ratio for a total of 1000 patients. Let <span class="math inline">\(X_i = 0\)</span> subject <span class="math inline">\(i\)</span> is assigned to the control arm and <span class="math inline">\(X_i = 1\)</span> if a subject is assigned to the treatment arm.</p>
+<p>Assume that survival times for all patients follow an exponential distribution with hazard function <span class="math inline">\(h(t_i) = \lambda \cdot \exp(\beta X_i)\)</span>, where <span class="math inline">\(\beta\)</span> is the log-hazard ratio (treatment effect) between the treatment and control arm. Assume patients on the control arm have a median time-to-event of 10 months. This corresponds <span class="math inline">\(\lambda = \frac{\log2}{10}\)</span> in the model above. Assume the treatment doubles survival time to 20 month. This corresponds to hazard ratio of <span class="math inline">\(\exp(\beta) = 0.50\)</span>.</p>
+<pre class="r"><code>set.seed(11)
+lambda &lt;- log(2) / 10
+hr &lt;- 0.50
+n_per_arm &lt;- 500
+
+patient_df &lt;- tibble(
+  patient_id = seq(1, 2 * n_per_arm),
+  arm = rep(c(&quot;ctrl&quot;, &quot;trt&quot;), each = n_per_arm),
+  surv_time = c(rexp(n_per_arm, lambda), rexp(n_per_arm, lambda * hr))
+)</code></pre>
+<p>Let’s make sure our simulated data matches our expectation. The median survival is roughly what we expect for both arms.</p>
+<pre class="r"><code>patient_df %&gt;% 
+  group_by(arm) %&gt;%
+  summarize(&quot;Median Survival&quot; = median(surv_time)) %&gt;%
+  kableExtra::kbl(digits = 1) %&gt;%
+  kable_paper(&quot;hover&quot;, full_width = F)</code></pre>
+<table class=" lightable-paper lightable-hover" style="font-family: &quot;Arial Narrow&quot;, arial, helvetica, sans-serif; width: auto !important; margin-left: auto; margin-right: auto;">
+<thead>
+<tr>
+<th style="text-align:left;">
+arm
+</th>
+<th style="text-align:right;">
+Median Survival
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+ctrl
+</td>
+<td style="text-align:right;">
+10.4
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+trt
+</td>
+<td style="text-align:right;">
+20.3
+</td>
+</tr>
+</tbody>
+</table>
+<p>Let’s plot both arms to get an idea of what the distribution looks like.</p>
+</div>
+<div id="type-ii-censoring" class="section level2">
+<h2>Type II Censoring</h2>
+<p>Type II censoring (“administrative censoring”) occurs when an experiment ends when a prespecified number of events occur. This is the type of censoring that occurs with All subjects without a survival event are right censored.</p>
+<div class="figure"><span style="display:block;" id="fig:unnamed-chunk-1"></span>
+<img src="{{< blogdown/postref >}}index_files/figure-html/unnamed-chunk-1-1.png" alt="Type II Censoring" width="672" />
+<p class="caption">
+Figure 1: Type II Censoring
+</p>
+</div>
+<p>In our example, we’ll stop the trial when we’ve observed that <span class="math inline">\(80\%\)</span> of patients have had an event. This corresponds to 800 events. The remaining 200 will be censored</p>
+<p>In <code>dplyr</code>, we can use <code>nth()</code> function to find the time when the experiment ends. Then we use <code>ifelse()</code> to replace censored survival time with the time the experiment ends.</p>
+<pre class="r"><code>censor_time &lt;- nth(patient_df$surv_time, n = 800L, order_by = patient_df$surv_time)
+
+patient_df = patient_df %&gt;%
+  mutate(
+    event = surv_time &lt;= censor_time,
+    obs_time = ifelse(!event, censor_time, surv_time),
+  )</code></pre>
+</div>
+<div id="arrival-times-and-censoring" class="section level2">
+<h2>Arrival Times and Censoring</h2>
+<p>Patients don’t begin a clinical trial at the same time. Their entry into the trial is staggered; the sponsor finds new sites and recruits new patients. It can take months or years to recruit patients. As we’ll see, this affects censoring.</p>
+<p>We’ll assume that patients join the trial uniformally over a 6 month period: <span class="math inline">\(A_i \sim U[0, 6]\)</span>. We add these arrival times to patient’s survival times. This represents time relative to the start of the trial, when asubject will have an event.</p>
+<pre class="r"><code>with_arrivals &lt;-
+  patient_df %&gt;% 
+  mutate(
+    arrival_time = runif(n(), 0, 6),
+    relative_time = arrival_time + surv_time
+  )</code></pre>
+<p><img src="{{< blogdown/postref >}}index_files/figure-html/arrival_plot-1.png" width="672" /></p>
+<!-- Let's examine this on a subset of our data -->
+<!-- ```{r arrival-times-preview, echo=FALSE} -->
+<!-- set.seed(1) -->
+<!-- with_arrivals %>%  -->
+<!--   sample_n(5) %>%  -->
+<!--   select(patient_id, arrival_time, surv_time, relative_time) %>%  -->
+<!--   kbl(digits = 1) %>%  -->
+<!--   kable_paper("hover", full_width = F) -->
+<!-- ``` -->
+</div>
+<div id="arrival-times-and-censoring-type-ii-administrative-censoring" class="section level2">
+<h2>Arrival Times and Censoring Type II (“Administrative”) Censoring</h2>
+<p>We’ll use the tools from the previous section to the time of censoring with arrivals. We find the calendar time when800 events occur</p>
+<p>We can get the time of the 400th event with <code>nth(relative_time, n = 400, order_by = relative_time) =</code> 13.5</p>
+<pre class="r"><code>censor_time = with(with_arrivals, nth(relative_time, n = 400, order_by = relative_time))
+
+  
+with_arrivals %&gt;% 
+  mutate(
+    event = relative_time &lt;= censor_time,
+    obs_time = ifelse(!event, censor_time - arrival_time, surv_time),
+  )</code></pre>
+<pre><code>## # A tibble: 1,000 x 7
+##    patient_id arm   surv_time event obs_time arrival_time relative_time
+##         &lt;int&gt; &lt;chr&gt;     &lt;dbl&gt; &lt;lgl&gt;    &lt;dbl&gt;        &lt;dbl&gt;         &lt;dbl&gt;
+##  1          1 ctrl     11.6   FALSE    8.98         4.53          16.1 
+##  2          2 ctrl    101.    FALSE    8.42         5.09         106.  
+##  3          3 ctrl      0.306 TRUE     0.306        0.729          1.04
+##  4          4 ctrl     60.6   FALSE   11.9          1.57          62.2 
+##  5          5 ctrl     35.5   FALSE   11.2          2.28          37.8 
+##  6          6 ctrl     12.3   TRUE    12.3          0.676         13.0 
+##  7          7 ctrl      1.23  TRUE     1.23         3.53           4.77
+##  8          8 ctrl     18.5   FALSE   10.7          2.80          21.3 
+##  9          9 ctrl      6.75  TRUE     6.75         2.21           8.96
+## 10         10 ctrl      2.13  TRUE     2.13         1.85           3.98
+## # ... with 990 more rows</code></pre>
+</div>
