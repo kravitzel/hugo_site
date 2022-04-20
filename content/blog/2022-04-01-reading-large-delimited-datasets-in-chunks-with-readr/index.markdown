@@ -57,7 +57,7 @@ chunked_df
 ```
 
 ```
-## # A tibble: 4 x 11
+## # A tibble: 4 × 11
 ##     mpg   cyl  disp    hp  drat    wt  qsec    vs    am  gear  carb
 ##   <dbl> <dbl> <dbl> <dbl> <dbl> <dbl> <dbl> <dbl> <dbl> <dbl> <dbl>
 ## 1  21.4     6  258    110  3.08  3.22  19.4     1     0     3     1
