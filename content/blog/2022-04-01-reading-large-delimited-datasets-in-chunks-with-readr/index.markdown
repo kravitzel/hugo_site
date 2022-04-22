@@ -1,10 +1,12 @@
 ---
 title: Reading large delimited datasets in chunks with readr
-author: 'Eli S. Kravitz'
+author: "Eli S. Kravitz"
 date: '2022-04-01'
-slug: []
-categories: []
-tags: []
+excerpt: "" 
+series:
+  tags:
+  categories:
+  layout: single # single or single-sidebar
 ---
 
 ## Use Case
@@ -57,7 +59,7 @@ chunked_df
 ```
 
 ```
-## # A tibble: 4 × 11
+## # A tibble: 4 x 11
 ##     mpg   cyl  disp    hp  drat    wt  qsec    vs    am  gear  carb
 ##   <dbl> <dbl> <dbl> <dbl> <dbl> <dbl> <dbl> <dbl> <dbl> <dbl> <dbl>
 ## 1  21.4     6  258    110  3.08  3.22  19.4     1     0     3     1

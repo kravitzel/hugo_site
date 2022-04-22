@@ -1,0 +1,161 @@
+---
+title: "Collaborating With Local Git Repositories"
+subtitle: "Low Tech Data Science"
+excerpt: ""
+date: 2022-02-03T18:47:55-05:00
+author: "Eli S. Kravitz"
+draft: true
+series:
+  tags:
+  categories:
+  layout: single # single or single-sidebar
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE, 
+  eval = FALSE, 
+  engine.opts = list("bash" = "-1",
+                     "highlight" = "zenburn")
+)
+```
+
+## Background 
+
+TODO
+
+## Preliminaries
+
+This assumes some basic familiarity with Git and Github. If you don't have this background, check out [Happy Git and GitHub for the userR](https://happygitwithr.com/index.html) by Jennifer Bryan for an R focused introduction to Git or [GitHowTo](https://githowto.com/) for a language agnostic introduction.
+
+You need to set a user name and email address for Git. These are displayed when you commit changes; they will not be connected to any of your Census accounts.
+
+Log into IRE and enter the following in the console. 
+```{bash username_email}
+git config --global user.name "Hugh Jazz" # Replace with your name
+git config --global user.email "hugh.jazz@hotmail.com" # Replace with your email
+```
+
+You can check your  `config` settings with `git config -l` or `git config --list`. If you already have a user name nad email, you don't need to renter it
+
+```{bash check_config}
+git config --l
+```
+
+```{bash highlight = FALSE}
+## user.name="Hugh Jazz"
+## user.email="hugh.jazz@hotmail.gov'
+```
+
+I recommend adding the following command to your `git config`. This command allows you to type `git hist` to see a cleanly formatted history of your repository.
+
+```{bash}
+git config --global alias.hist "log --pretty=format:'%h %ad | %s%d [%an]' --graph --date=short"
+
+```
+
+
+
+## Setting up a Local Remote Repository
+
+
+Instead of Github hosting our remote repository, we'll place our remote in a directory on the network that all project members have access to. Git. We need to make a [bare repository](https://stegosaurusdormant.com/bare-git-repo/). A bare repository is set up for sharing. It contains only the information needed for Git to create the files in a repository and their history. It does not directly contain the files you are editing (the "Working Tree").  If you don't use a bare repository, you need to make sure the branch of the remote is not set to main; you can't push changes to an active branch. Bare repositories save you the extra step of changing the origin's branch every time you want to push changes.
+
+This guide sets up a repository `/user/your_directory/example_project.git` to illustrate the steps. Note that `example_project.git` is a directory, not a `.git` file. It's customary to give bare repos a .git extension.
+
+Initiate the bare repository:
+```{bash}
+mkdir /user/example_project.git  # Bare repos are customarily given a .git extension
+cd sexample_project.git
+git init --bare 
+```
+
+```{bash highlight = FALSE}
+## Initialized empty Git repository in /user/your_directory/ example_project.git
+```
+
+Users cannot work in bare repositories directly. You need to clone the repo and push changes.
+
+I clone clone the repo, add some basic structure to the project, then push the changes to remote. You should (but aren't required) to give the local repo the same name as the remote. For illustration, I append `_local` to the end of my local repo to distinguish it from the remote. 
+
+Make a git repo:
+```{bash, engine.opts="-l"}
+mkdir /user/eli/some/file/path/example_project_local # Make empty directory
+cd  /user/eli/some/file/path/example_project_local
+git init
+git remote add origin /user/example_project.git  # connect the remote
+```
+
+Verify that you set the remote correctly
+```{bash, engine.opts="-l"}
+git remote -v
+```
+
+```{bash highlight = FALSE}
+## origin /user/example_project.git (fetch)
+## origin /user/example_project.git (push)
+```
+
+I add a `README.md` file, some folders, and dummy files to my local repository. You can do this in Dolphin or from the console. Nothing is specifically required in this step. Make sure to open RStudio and [assosciate this directory with a project](https://r4ds.had.co.nz/workflow-projects.html#rstudio-projects) so you can use RStudio's Git GUI later. **Do not** select the "Create a git repository" checkbox. You'll know if you set up a RStudio project if you see a `.Rproj` file in your directory.
+
+My repo looks like this:
+```{verbatim}
+.git\
+R\
+dummy_file.R
+data\
+documentation\
+important_text_file.txt
+.gitignore
+example_repo_eli.Rproj
+README.md
+```
+
+I edit the .gitignore file to not track `csv` or SAS files. These files are usually large and should be stored in `proejcts/data`. Important data files can be manually added with `git commit --force some_data_file.csv`.
+
+My `.gitignore` has the following lines.
+````markdown
+.Rproj.user
+.Rhistory
+.Rdata
+*.csv
+*sas7bdat
+*.sas7bcat
+*.xpt
+````
+
+The first commit and push need to be done from console. After that you can use RStudio or continue using the console.
+
+```{bash, engine.opts="-l"}
+git add *
+git add .gitignore
+git commit -am "Initial commit" 
+git push -u origin master
+```
+
+## Setup for Remaining Users
+
+First time users need to use console to clone a local copy of the remote. After that, users can use RStudio's Git GUI to stage, commit, push, and pull from the local repository. RStudio will track *all* files, not just `.R`, `.Rds`, and other R files.  Users may also continue to use Git from the console.  
+
+```{bash}
+cd /projects/users/YOUR_USERNAME/
+git clone /projects/programs/sipp_cps_project.git # Puts repo into a folder called example_repo
+```
+
+## Typical Workflow
+
+After the initial setup, the workflow is the same as using Github. You can commit, push, pull, revert changes, and make new branches from RStudio or the console. Instructions for using Git in Rstudio are available in [Section 4.9](https://book.cds101.com/how-to-stage-commit-and-push-to-github-using-rstudio-server.html) of Introduction to Computational and Data Science.  Example console input is provided below:
+```{bash}
+git pull # If you need to update you branch from remote
+
+git add * # Add your files 
+git commit -am "My commit message" 
+git push 
+```
+
+The workflow is the same as if you were using Git with Github:
+
+1. **Pull** from the remote repository to sync changes to your local repository
+1. **Stage** files to indicate what you want Git to track
+1. **Commit** your local changes to take a "snapshot" of the work you staged in the previous step
+1. **Push** your changes to remote to include your local changes in the "global" repository

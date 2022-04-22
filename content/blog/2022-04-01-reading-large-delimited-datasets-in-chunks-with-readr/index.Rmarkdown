@@ -1,10 +1,12 @@
 ---
 title: Reading large delimited datasets in chunks with readr
-author: 'Eli S. Kravitz'
+author: "Eli S. Kravitz"
 date: '2022-04-01'
-slug: []
-categories: []
-tags: []
+excerpt: "" 
+series:
+  tags:
+  categories:
+  layout: single # single or single-sidebar
 ---
 
 ## Use Case
