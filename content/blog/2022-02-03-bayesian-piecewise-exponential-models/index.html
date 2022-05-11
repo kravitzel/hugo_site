@@ -1,8 +1,8 @@
 ---
-title: "2022 02 03 Bayesian Piecewise Exponential Models"
+title: "Everyone Learns Generalized Linear Models (GLMs) Wrong"
 subtitle: ""
 excerpt: ""
-date: 2022-02-03T18:47:55-05:00
+date: 2022-04-29
 author: ""
 draft: true
 series:
@@ -14,36 +14,6 @@ layout: single # single or single-sidebar
 <script src="{{< blogdown/postref >}}index_files/header-attrs/header-attrs.js"></script>
 
 
-<div id="the-exponential-distribution" class="section level2">
-<h2>The Exponential Distribution</h2>
-<!-- The [Exponential Distribution](https://en.wikipedia.org/wiki/Exponential_distribution)  -->
-<p>An exponential survival model is considered the simplest <a href="https://data.princeton.edu/wws509/notes/c7.pdf">parametric survival model</a>. An exponential model assumes the risk of an event occurring remains constant over time. This results in the the hazard function
-<span class="math display">\[h(t) = \lambda\]</span>
-and the corresponding survival function given by
-<span class="math display">\[S(t) = \exp(-\lambda t) \text{ and } \]</span></p>
-</div>
-<div id="why-use-an-exponential-model" class="section level2">
-<h2>Why use an Exponential Model</h2>
-</div>
-<div id="piecewise-exponential-model" class="section level2">
-<h2>Piecewise Exponential Model</h2>
-<div id="one-changepoint-two-hazards" class="section level3">
-<h3>One Changepoint / Two Hazards</h3>
-<p><img src="{{< blogdown/postref >}}index_files/figure-html/two_hazard_pw-1.png" width="672" /></p>
-</div>
-</div>
-<div id="fitting-a-piecewise-exponential-with-stan" class="section level2">
-<h2>Fitting a Piecewise Exponential with Stan</h2>
-<pre class="r"><code>library(PWEALL) # Simulates piecewise exponential
-
-# Simulate survival times -----------------------------------------------------
-# ctrl_time = rpwe(nr = n_ctrl, rate = c(rate_1_ctrl, rate_2_ctrl), tchange = c(0,change_point))$r
-# trt_time = rpwe(nr = n_trt, rate = c(rate_1_trt, rate_2_trt), tchange = c(0,change_point))$r
-# 
-# all_data = tibble(
-#   &quot;id&quot; = seq(1, n_trt + n_ctrl),
-#   &quot;time&quot; = c(ctrl_time, trt_time),
-#   &quot;trt&quot; = c(rep(0, n_ctrl), rep(1, n_trt)),
-#   &quot;event&quot; = 1 # everyone has an event, replace with censoring in actual data
-# )</code></pre>
+<div id="the-problem" class="section level2">
+<h2>The Problem</h2>
 </div>

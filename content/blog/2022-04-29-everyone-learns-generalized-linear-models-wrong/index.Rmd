@@ -1,0 +1,128 @@
+---
+title: "2022 02 03 Bayesian Piecewise Exponential Models"
+subtitle: ""
+excerpt: ""
+date: 2022-02-03T18:47:55-05:00
+author: ""
+draft: true
+series:
+tags:
+categories:
+layout: single # single or single-sidebar
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+
+library(tidyverse)
+library(ggthemes)
+library(patchwork)
+```
+## The Exponential Distribution 
+
+<!-- The [Exponential Distribution](https://en.wikipedia.org/wiki/Exponential_distribution)  -->
+
+An exponential survival model is considered the simplest [parametric survival model](https://data.princeton.edu/wws509/notes/c7.pdf). An exponential model assumes the risk of an event occurring remains constant over time. This results in the the hazard function
+$$h(t) = \lambda$$
+and the corresponding survival function given by
+$$S(t) = \exp(-\lambda t) \text{ and } $$
+
+```{r exponential_plot, fig.cap = "Hazard and Survival Function"}
+time_seq <- seq(0, 120, by = 0.5)
+lambda_fixed <- log(2) / 40
+
+exp_plot_df <-
+  tibble("t" = time_seq, "hazard" = lambda_fixed) %>%
+  mutate("s_of_t" = pexp(q = t, rate = hazard, lower.tail = FALSE))
+
+exp_surv_plot <-
+  ggplot(exp_plot_df) +
+  geom_line(
+    aes(x = t, y = s_of_t),
+    size = 1.5
+  ) +
+  theme_minimal() +
+  labs(
+    title = "Survival Function",
+    x = "Time",
+    y = "Prob. of Survival"
+  )
+
+exp_haz_plot <-
+  ggplot(exp_plot_df) +
+  geom_line(
+    aes(x = t, y = hazard),
+    size = 1.5
+  ) +
+  theme_minimal() +
+  labs(
+    title = "Survival Function",
+    x = "Time",
+    y = "Hazard"
+  )
+```
+
+## Why use an Exponential Model
+
+## Piecewise Exponential Model
+### One Changepoint / Two Hazards
+
+```{r two_hazard_pw}
+time_seq <- seq(0, 120, by = 0.5)
+lambda_1 <- log(2) / 40
+lambda_2 <- log(2) / 15
+changepoint <- 25
+
+two_pwe_plot_df <-
+  tibble("t" = time_seq) %>%
+  mutate(
+    "hazard" = if_else(t <= changepoint, lambda_1, lambda_2),
+    "s_of_t" = pexp(q = t, rate = hazard, lower.tail = FALSE)
+  )
+
+two_pwe_surv <- ggplot(two_pwe_plot_df) +
+  geom_line(
+    aes(x = t, y = s_of_t),
+    size = 1.5
+  ) +
+  theme_minimal() +
+  labs(
+    title = "Survival Function",
+    x = "Time",
+    y = "Prob. of Survival"
+  )
+
+two_pwe_haz <- ggplot(two_pwe_plot_df) +
+  geom_line(
+    aes(x = t, y = hazard),
+    size = 1.5
+  ) +
+  theme_minimal() +
+  labs(
+    title = "Hazard Function",
+    x = "Time",
+    y = "Hazard"
+  )
+
+two_pwe_haz / two_pwe_surv
+
+```
+
+## Fitting a Piecewise Exponential with Stan
+
+```{r echo = TRUE}
+library(PWEALL) # Simulates piecewise exponential
+
+# Simulate survival times -----------------------------------------------------
+# ctrl_time = rpwe(nr = n_ctrl, rate = c(rate_1_ctrl, rate_2_ctrl), tchange = c(0,change_point))$r
+# trt_time = rpwe(nr = n_trt, rate = c(rate_1_trt, rate_2_trt), tchange = c(0,change_point))$r
+# 
+# all_data = tibble(
+#   "id" = seq(1, n_trt + n_ctrl),
+#   "time" = c(ctrl_time, trt_time),
+#   "trt" = c(rep(0, n_ctrl), rep(1, n_trt)),
+#   "event" = 1 # everyone has an event, replace with censoring in actual data
+# )
+
+```
+
